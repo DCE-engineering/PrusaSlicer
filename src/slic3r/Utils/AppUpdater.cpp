@@ -14,6 +14,8 @@
 #include "slic3r/GUI/GUI.hpp"
 #include "slic3r/Utils/Http.hpp"
 
+#include "libslic3r/Utils.hpp"
+
 #ifdef _WIN32
 #include <shellapi.h>
 #include <Shlobj_core.h>
@@ -30,44 +32,11 @@ namespace {
 #ifdef _WIN32
 	bool run_file(const boost::filesystem::path& path)
 	{
-		// find updater exe
-		if (boost::filesystem::exists(path)) {
-			// run updater. Original args: /silent -restartapp prusa-slicer.exe -startappfirst
-
-			// Using quoted string as mentioned in CreateProcessW docs, silent execution parameter.
-			std::wstring wcmd = L"\"" + path.wstring(); //lm: closing quote?
-
-			// additional information
-			STARTUPINFOW si;
-			PROCESS_INFORMATION pi;
-
-			// set the size of the structures
-			ZeroMemory(&si, sizeof(si));
-			si.cb = sizeof(si);
-			ZeroMemory(&pi, sizeof(pi));
-
-			// start the program up
-			if (CreateProcessW(NULL,   // the path
-				wcmd.data(),    // Command line
-				NULL,           // Process handle not inheritable
-				NULL,           // Thread handle not inheritable
-				FALSE,          // Set handle inheritance to FALSE
-				0,              // No creation flags
-				NULL,           // Use parent's environment block
-				NULL,           // Use parent's starting directory 
-				&si,            // Pointer to STARTUPINFO structure
-				&pi             // Pointer to PROCESS_INFORMATION structure (removed extra parentheses)
-			)) {
-				// Close process and thread handles.
-				CloseHandle(pi.hProcess);
-				CloseHandle(pi.hThread);
-				return true;
-			}
-			else {
-				BOOST_LOG_TRIVIAL(error) << "Failed to run " << wcmd; //lm: maybe a UI error message?
-			}
-		}
-		return false;
+		std::string msg;
+		bool res = create_process(path, std::wstring(), msg);
+		if (!res)
+			BOOST_LOG_TRIVIAL(error) << msg; // lm: maybe UI error msg? 
+		return res;
 	}
 
 	std::string get_downloads_path()
@@ -81,16 +50,19 @@ namespace {
 		CoTaskMemFree(path);
 		return ret;
 	}
-
+	/*
 	bool open_folder(const boost::filesystem::path& path)
 	{
 		// this command can run the installer exe as well, but is it better than CreateProcessW?
-		ShellExecuteW(NULL, NULL, path.wstring().c_str(), NULL, NULL, SW_SHOWNORMAL);
+		// https://docs.microsoft.com/en-us/windows/win32/api/shellapi/nf-shellapi-shellexecutew :
+		// To explore a folder, use the following call:
+		// ShellExecute(handle, "explore", <fully_qualified_path_to_folder>, NULL, NULL, SW_SHOWNORMAL);
+		ShellExecuteW(NULL, L"explore", path.wstring().c_str(), NULL, NULL, SW_SHOWNORMAL);
 		//lm:I would make it explicit that the folder should be opened.
 		//lm:Also, this always returns true.
 		return true;
 	}
-
+	*/
 #elif __linux__
 	bool run_file(const boost::filesystem::path& path)
 	{	
@@ -140,7 +112,7 @@ namespace {
 		}
 		return std::string();
 	}
-
+	/*
 	bool open_folder(const boost::filesystem::path& path)
 	{
 		if (boost::filesystem::is_directory(path)) {
@@ -182,7 +154,7 @@ namespace {
 		}
 		return false;
 	}
-
+	*/
 #elif  __APPLE__
 	bool run_file(const boost::filesystem::path& path)
 	{
@@ -203,7 +175,7 @@ namespace {
 		// call objective-c implementation
 		return get_downloads_path_mac();
 	}
-
+	/*
 	bool open_folder(const boost::filesystem::path& path)
 	{
 
@@ -214,6 +186,7 @@ namespace {
 		}
 		return false;
 	}
+	*/
 #endif 
 } // namespace
 
@@ -271,7 +244,7 @@ AppUpdater::priv::priv() :
 	if (!downloads_path.empty()) {
 		m_default_dest_folder = std::move(downloads_path);
 	}
-	BOOST_LOG_TRIVIAL(error) << "Default download path: " << m_default_dest_folder; //lm:Is this an error?
+	BOOST_LOG_TRIVIAL(trace) << "App updater default download path: " << m_default_dest_folder; //lm:Is this an error?
 	
 }
 
@@ -318,7 +291,7 @@ boost::filesystem::path AppUpdater::priv::download_file(const DownloadAppData& d
 		return boost::filesystem::path();
 	}
 	std::string error_message;
-	bool res = http_get_file(data.url, 80 * 1024 * 1024 //TODO: what value here //lm:I don't know, but larger. The binaries will grow.
+	bool res = http_get_file(data.url, 100 * 1024 * 1024 //2.4.0 windows installer is 65MB //lm:I don't know, but larger. The binaries will grow.
 		// on_progress
 		, [&last_gui_progress, expected_size](Http::Progress progress) {
 			// size check
@@ -329,12 +302,13 @@ boost::filesystem::path AppUpdater::priv::download_file(const DownloadAppData& d
 				evt->SetString(message);
 				GUI::wxGetApp().QueueEvent(evt);
 				return false;
-			} else if (progress.dltotal > 0 && progress.dltotal < expected_size) { //lm:When will this happen? Is that not an error?
-				BOOST_LOG_TRIVIAL(error) << GUI::format("Downloading new %1% has incorrect size. The download will continue. \nExpected size: %2%\nDownload size: %3%", SLIC3R_APP_NAME, expected_size, progress.dltotal);;
-			}
+			} else if (progress.dltotal > 0 && progress.dltotal < expected_size) { 
+				//lm:When will this happen? Is that not an error? // dk: It is possible error, but we cannot know until the download is finished. Somehow the total size can grow during the download.
+				BOOST_LOG_TRIVIAL(info) << GUI::format("Downloading new %1% has incorrect size. The download will continue. \nExpected size: %2%\nDownload size: %3%", SLIC3R_APP_NAME, expected_size, progress.dltotal);
+			} 
 			// progress event
 			size_t gui_progress = progress.dltotal > 0 ? 100 * progress.dlnow / progress.dltotal : 0;
-			//BOOST_LOG_TRIVIAL(error) << "App download " << gui_progress << "% " << progress.dlnow << " of " << progress.dltotal;
+			BOOST_LOG_TRIVIAL(error) << "App download " << gui_progress << "% " << progress.dlnow << " of " << progress.dltotal;
 			if (last_gui_progress < gui_progress && (last_gui_progress != 0 || gui_progress != 100)) {
 				last_gui_progress = gui_progress;
 				wxCommandEvent* evt = new wxCommandEvent(EVT_SLIC3R_APP_DOWNLOAD_PROGRESS);
@@ -349,7 +323,7 @@ boost::filesystem::path AppUpdater::priv::download_file(const DownloadAppData& d
 			size_t body_size = body.size(); 
 			if (body_size != expected_size) {
 				//lm:UI message?
-				BOOST_LOG_TRIVIAL(error) << "Downloaded file has wrong size. Expected size: " <<  expected_size << " Downloaded size: " << body_size;
+				error_message = GUI::format("Downloaded file has wrong size. Expected size: %1% Downloaded size: %2%", expected_size, body_size);
 				return false;
 			}
 			boost::filesystem::path tmp_path = dest_path;
@@ -363,7 +337,8 @@ boost::filesystem::path AppUpdater::priv::download_file(const DownloadAppData& d
 			}
 			catch (const std::exception&)
 			{
-				BOOST_LOG_TRIVIAL(error) << "Failed to write and move " << tmp_path << " to " << dest_path;
+				//BOOST_LOG_TRIVIAL(error) << "Failed to write and move " << tmp_path << " to " << dest_path;
+				error_message = GUI::format("Failed to write and move %1% to %2%", tmp_path, dest_path);
 				return false;
 			}
 			return true;
@@ -374,7 +349,7 @@ boost::filesystem::path AppUpdater::priv::download_file(const DownloadAppData& d
 	{
 		if (this->m_cancel)
 		{
-			BOOST_LOG_TRIVIAL(error) << error_message; //lm:Is this an error?
+			BOOST_LOG_TRIVIAL(info) << error_message; //lm:Is this an error?
 		} else {
 			std::string message = GUI::format("Downloading new %1% has failed:\n%2%", SLIC3R_APP_NAME, error_message);
 			BOOST_LOG_TRIVIAL(error) << message;
@@ -450,10 +425,10 @@ void AppUpdater::priv::parse_version_string(const std::string& body)
 		if (section_name == 
 #ifdef _WIN32
 			"release:win64"
-#elif __linux__
-			"release:linux"
-#else
+#elif __APPLE__
 			"release:osx"
+#else
+			"release:linux"
 #endif
 //lm:Related to the ifdefs. We should also support BSD, which behaves similar to Linux in most cases.
 // Unless you have a reason not to, I would consider doing _WIN32, elif __APPLE__, else ... Not just here.
@@ -530,7 +505,7 @@ void AppUpdater::priv::parse_version_string(const std::string& body)
 	GUI::wxGetApp().QueueEvent(evt);
 }
 
-#if 0 //lm:is this meant to be ressurected?
+#if 0 //lm:is this meant to be ressurected? //dk: it is code that parses PrusaSlicer.version2 in 2.4.0, It was deleted from PresetUpdater.cpp and I would keep it here for possible reference.
 void AppUpdater::priv::parse_version_string_old(const std::string& body) const
 {
 
@@ -647,7 +622,7 @@ void AppUpdater::sync_download()
 				if (input_data.start_after) {
 					p->run_downloaded_file(std::move(dest_path));
 				} else {
-					open_folder(dest_path.parent_path());
+					GUI::desktop_open_folder(dest_path.parent_path());
 				}
 			}
 		});

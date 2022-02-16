@@ -436,42 +436,12 @@ static bool run_updater_win()
 {
     // find updater exe
     boost::filesystem::path path_updater = boost::dll::program_location().parent_path() / "prusaslicer-updater.exe";
-    if (boost::filesystem::exists(path_updater)) {
-        // run updater. Original args: /silent -restartapp prusa-slicer.exe -startappfirst
-
-        // Using quoted string as mentioned in CreateProcessW docs, silent execution parameter.
-        std::wstring wcmd = L"\"" + path_updater.wstring() + L"\" /silent";
-
-        // additional information
-        STARTUPINFOW si;
-        PROCESS_INFORMATION pi;
-
-        // set the size of the structures
-        ZeroMemory(&si, sizeof(si));
-        si.cb = sizeof(si);
-        ZeroMemory(&pi, sizeof(pi));
-
-        // start the program up
-        if (CreateProcessW(NULL,   // the path
-            wcmd.data(),    // Command line
-            NULL,           // Process handle not inheritable
-            NULL,           // Thread handle not inheritable
-            FALSE,          // Set handle inheritance to FALSE
-            0,              // No creation flags
-            NULL,           // Use parent's environment block
-            NULL,           // Use parent's starting directory 
-            &si,            // Pointer to STARTUPINFO structure
-            &pi             // Pointer to PROCESS_INFORMATION structure (removed extra parentheses)
-        )) {
-            // Close process and thread handles.
-            CloseHandle(pi.hProcess);
-            CloseHandle(pi.hThread);
-            return true;
-        } else {
-            BOOST_LOG_TRIVIAL(error) << "Failed to start prusaslicer-updater.exe with command " << wcmd;
-        }
-    }
-    return false;
+    // run updater. Original args: /silent -restartapp prusa-slicer.exe -startappfirst
+    std::string msg;
+    bool res = create_process(path_updater, L"/silent", msg);
+    if (!res)
+        BOOST_LOG_TRIVIAL(error) << msg; // lm: maybe UI error msg? 
+    return res;
 }
 #endif //_WIN32
 
@@ -1180,7 +1150,6 @@ bool GUI_App::on_init_inner()
         preset_updater = new PresetUpdater();
         Bind(EVT_SLIC3R_VERSION_ONLINE, &GUI_App::on_version_read, this);
         Bind(EVT_SLIC3R_EXPERIMENTAL_VERSION_ONLINE, [this](const wxCommandEvent& evt) {
-            app_config->save();//lm:What is the purpose?
             if (this->plater_ != nullptr && app_config->get("notify_release") == "all") {
                 std::string evt_string = into_u8(evt.GetString());
                 if (*Semver::parse(SLIC3R_VERSION) < *Semver::parse(evt_string)) {
@@ -3180,7 +3149,6 @@ void GUI_App::associate_gcode_files()
 
 void GUI_App::on_version_read(wxCommandEvent& evt)
 {
-    
     app_config->set("version_online", into_u8(evt.GetString()));
     app_config->save();
     std::string opt = app_config->get("notify_release");

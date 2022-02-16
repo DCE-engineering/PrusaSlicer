@@ -809,6 +809,50 @@ bool is_shapes_dir(const std::string& dir)
 	return dir == sys_shapes_dir() || dir == custom_shapes_dir();
 }
 
+#ifdef _WIN32
+bool create_process(const boost::filesystem::path& path, const std::wstring& cmd_opt, std::string& error_msg)
+{
+	// find updater exe
+	if (boost::filesystem::exists(path)) {
+		// Using quoted string as mentioned in CreateProcessW docs.
+		std::wstring wcmd = L"\"" + path.wstring() + L"\"";
+		if (!cmd_opt.empty())
+			wcmd += L" " + cmd_opt;
+
+		// additional information
+		STARTUPINFOW si;
+		PROCESS_INFORMATION pi;
+
+		// set the size of the structures
+		ZeroMemory(&si, sizeof(si));
+		si.cb = sizeof(si);
+		ZeroMemory(&pi, sizeof(pi));
+
+		// start the program up
+		if (CreateProcessW(NULL,   // the path
+			wcmd.data(),    // Command line
+			NULL,           // Process handle not inheritable
+			NULL,           // Thread handle not inheritable
+			FALSE,          // Set handle inheritance to FALSE
+			0,              // No creation flags
+			NULL,           // Use parent's environment block
+			NULL,           // Use parent's starting directory 
+			&si,            // Pointer to STARTUPINFO structure
+			&pi             // Pointer to PROCESS_INFORMATION structure (removed extra parentheses)
+		)) {
+			// Close process and thread handles.
+			CloseHandle(pi.hProcess);
+			CloseHandle(pi.hThread);
+			return true;
+		}
+		else
+			error_msg = "CreateProcessW failed to create process " + boost::nowide::narrow(path.wstring());
+	} else
+		error_msg = "Path to the executable doesn't exists. Path: " + boost::nowide::narrow(path.wstring());
+	return false;
+}
+#endif //_WIN32
+
 } // namespace Slic3r
 
 #ifdef WIN32
