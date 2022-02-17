@@ -430,8 +430,8 @@ bool static check_old_linux_datadir(const wxString& app_name) {
 }
 #endif
 
-
 #ifdef _WIN32
+#if 0 // External Updater is replaced with AppUpdater.cpp
 static bool run_updater_win()
 {
     // find updater exe
@@ -443,7 +443,8 @@ static bool run_updater_win()
         BOOST_LOG_TRIVIAL(error) << msg; // lm: maybe UI error msg? 
     return res;
 }
-#endif //_WIN32
+#endif // 0
+#endif // _WIN32
 
 struct FileWildcards {
     std::string_view              title;

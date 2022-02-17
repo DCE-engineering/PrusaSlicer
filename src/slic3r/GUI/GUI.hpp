@@ -82,6 +82,15 @@ extern void about();
 extern void desktop_open_datadir_folder();
 // Ask the destop to open the directory specified by path using the default file explorer.
 void desktop_open_folder(const boost::filesystem::path& path);
+
+// Call CreateProcessW to start external proccess on path
+// returns true on success
+// path should contain path to the process
+// cmd_opt can be empty or contain command line options. Example: L"/silent"
+// error_msg will contain error message if create_process return false
+#ifdef _WIN32
+bool create_process(const boost::filesystem::path& path, const std::wstring& cmd_opt, std::string& error_msg);
+#endif //_WIN32
 } // namespace GUI
 } // namespace Slic3r
 

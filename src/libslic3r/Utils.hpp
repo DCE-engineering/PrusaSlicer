@@ -113,15 +113,6 @@ extern bool is_gallery_file(const boost::filesystem::directory_entry& path, char
 extern bool is_gallery_file(const std::string& path, char const* type);
 extern bool is_shapes_dir(const std::string& dir);
 
-// Call CreateProcessW to start external proccess on path
-// returns true on success
-// path should contain path to the process
-// cmd_opt can be empty or contain command line options. Example: L"/silent"
-// error_msg will contain error message if create_process return false
-#ifdef _WIN32
-    bool create_process(const boost::filesystem::path& path, const std::wstring& cmd_opt, std::string& error_msg);
-#endif //_WIN32
-
 // File path / name / extension splitting utilities, working with UTF-8,
 // to be published to Perl.
 namespace PerlUtils {

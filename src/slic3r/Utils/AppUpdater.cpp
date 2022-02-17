@@ -33,7 +33,7 @@ namespace {
 	bool run_file(const boost::filesystem::path& path)
 	{
 		std::string msg;
-		bool res = create_process(path, std::wstring(), msg);
+		bool res = GUI::create_process(path, std::wstring(), msg);
 		if (!res)
 			BOOST_LOG_TRIVIAL(error) << msg; // lm: maybe UI error msg? 
 		return res;
@@ -366,9 +366,7 @@ boost::filesystem::path AppUpdater::priv::download_file(const DownloadAppData& d
 bool AppUpdater::priv::run_downloaded_file(boost::filesystem::path path)
 {
 	assert(!path.empty());
-	bool res = run_file(path);
-	BOOST_LOG_TRIVIAL(error) << "Running "<< path.string() << " was " << res;
-	return res;
+	return run_file(path);
 }
 
 void AppUpdater::priv::version_check(const std::string& version_check_url) 
