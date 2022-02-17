@@ -34,8 +34,13 @@ namespace {
 	{
 		std::string msg;
 		bool res = GUI::create_process(path, std::wstring(), msg);
-		if (!res)
-			BOOST_LOG_TRIVIAL(error) << msg; // lm: maybe UI error msg? 
+		if (!res) {
+			std::string full_message = GUI::format("Running downloaded instaler of %1% has failed:\n%2%", SLIC3R_APP_NAME, msg);
+			BOOST_LOG_TRIVIAL(error) << full_message; // lm: maybe UI error msg? 
+			wxCommandEvent* evt = new wxCommandEvent(EVT_SLIC3R_APP_DOWNLOAD_FAILED);
+			evt->SetString(full_message);
+			GUI::wxGetApp().QueueEvent(evt);
+		}
 		return res;
 	}
 
@@ -194,6 +199,7 @@ wxDEFINE_EVENT(EVT_SLIC3R_VERSION_ONLINE, wxCommandEvent);
 wxDEFINE_EVENT(EVT_SLIC3R_EXPERIMENTAL_VERSION_ONLINE, wxCommandEvent);
 wxDEFINE_EVENT(EVT_SLIC3R_APP_DOWNLOAD_PROGRESS, wxCommandEvent);
 wxDEFINE_EVENT(EVT_SLIC3R_APP_DOWNLOAD_FAILED, wxCommandEvent);
+wxDEFINE_EVENT(EVT_SLIC3R_APP_OPEN_FAILED, wxCommandEvent);
 
 // priv handles all operations in separate thread
 // 1) download version file and parse it.

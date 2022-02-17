@@ -440,7 +440,7 @@ static bool run_updater_win()
     std::string msg;
     bool res = create_process(path_updater, L"/silent", msg);
     if (!res)
-        BOOST_LOG_TRIVIAL(error) << msg; // lm: maybe UI error msg? 
+        BOOST_LOG_TRIVIAL(error) << msg; 
     return res;
 }
 #endif // 0
@@ -1176,7 +1176,9 @@ bool GUI_App::on_init_inner()
             show_error(nullptr, evt.GetString());
         });
 
-        
+        Bind(EVT_SLIC3R_APP_OPEN_FAILED, [this](const wxCommandEvent& evt) {
+            show_error(nullptr, evt.GetString());
+        });
     }
     else {
 #ifdef __WXMSW__ 
@@ -3201,42 +3203,15 @@ void GUI_App::app_updater(bool from_user)
         return;
     }
     // dialog with new version download (installer or app dependent on system)
-    AppUpdateDownloadDialog dwnld_dlg(*app_data.version);
+    AppUpdateDownloadDialog dwnld_dlg(*app_data.version, app_data.target_path);
     dialog_result = dwnld_dlg.ShowModal();
     //  Doesn't wish to download
     if (dialog_result != wxID_OK) {
         return;
     }
     // Save as dialog
-    if (dwnld_dlg.select_download_path()) {
-        std::string extension = app_data.target_path.filename().extension().string();
-        wxString wildcard;
-        if (!extension.empty()) {
-            extension = extension.substr(1);
-            wxString wxext = boost::nowide::widen(extension);
-            wildcard = GUI::format_wxstr("%1% Files (*.%2%)|*.%2%", wxext.Upper(), wxext);
-        }
-        wxFileDialog save_dlg(
-            plater()
-            , _L("Save as:")
-            , boost::nowide::widen(m_app_updater->get_default_dest_folder())
-            , boost::nowide::widen(AppUpdater::get_filename_from_url(app_data.url))
-            , wildcard
-            , wxFD_SAVE | wxFD_OVERWRITE_PROMPT
-        );
-        // Canceled
-        if (save_dlg.ShowModal() != wxID_OK) {
-            return;
-        // set path
-        } else {
-            app_data.target_path = boost::filesystem::path(save_dlg.GetPath().ToUTF8().data());
-        }
-    }
-    if (boost::filesystem::exists(app_data.target_path))
-    {
-        //lm:UI confirmation dialog?
-        BOOST_LOG_TRIVIAL(error) << "App download: File on target path already exists and will be overwritten. Path: " << app_data.target_path;
-    }
+    app_data.target_path =dwnld_dlg.get_download_path();
+
     // start download
     this->plater_->get_notification_manager()->push_download_progress_notification(_utf8("Download"), std::bind(&AppUpdater::cancel_callback, this->m_app_updater.get()));
     app_data.start_after = dwnld_dlg.run_after_download();
